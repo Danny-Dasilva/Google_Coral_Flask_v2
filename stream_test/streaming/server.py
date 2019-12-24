@@ -350,7 +350,7 @@ class StreamingServer:
             states = {client.send_video(frame_type, data) for client in self._enabled_clients}
             if ClientState.ENABLED_NEEDS_SPS in states:
                 logger.info('Requesting key frame')
-                self._camera.request_key_frame()
+                # self._camera.request_key_frame()
 
 class ClientLogger(logging.LoggerAdapter):
     def process(self, msg, kwargs):
@@ -406,11 +406,11 @@ class Client:
                     self._state = ClientState.ENABLED_NEEDS_SPS
             return self._state
 
-    def send_overlay(self, svg):
-        """Can be called by any user thread."""
-        with self._lock:
-            if self._state != ClientState.DISABLED:
-                self._queue_overlay(svg)
+    # def send_overlay(self, svg):
+    #     """Can be called by any user thread."""
+    #     with self._lock:
+    #         if self._state != ClientState.DISABLED:
+    #             self._queue_overlay(svg)
 
     def _send_command(self, command):
         self._commands.put((self, command))

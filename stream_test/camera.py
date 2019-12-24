@@ -36,6 +36,7 @@ class Camera:
 
     def start_recording(self, obj, format, profile, inline_headers, bitrate, intra_period):
         def on_buffer(data, _):
+
             obj.write(data)
 
         def render_overlay(tensor, layout, command):
