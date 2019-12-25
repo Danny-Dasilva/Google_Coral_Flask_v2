@@ -55,7 +55,7 @@ class Camera:
                                               False, signals))
         self._thread.start()
 
-    def stop_recording(self):
+    def le(self):
         gstreamer.quit()
         self._thread.join()
 
