@@ -249,7 +249,7 @@ class StreamingServer:
         self.close()
 
     def __init__(self, camera, bitrate=1000000, mdns_name=None,
-                 tcp_port=4665, web_port=4664, annexb_port=4666):
+                 tcp_port=4665, web_port=5001, annexb_port=4666):
         self._bitrate = bitrate
         self._camera = camera
         self._clients = AtomicSet()
@@ -304,11 +304,11 @@ class StreamingServer:
                             tcp_port, web_port, annexb_port)
                 tcp_socket = stack.enter_context(Socket(tcp_port))
                 web_socket = stack.enter_context(Socket(web_port))
-                annexb_socket = stack.enter_context(Socket(annexb_port))
+                
                 if mdns_name:
                     stack.enter_context(PresenceServer(mdns_name, tcp_port))
 
-                socks = (tcp_socket, web_socket, annexb_socket)
+                socks = (tcp_socket, web_socket)
                 while not self._done.is_set():
                     # Process available client commands.
                     try:
@@ -323,12 +323,10 @@ class StreamingServer:
                     for ready in rlist:
                         sock, addr = ready.accept()
                         name = '%s:%d' % addr
-                        if ready is tcp_socket:
-                            client = ProtoClient(name, sock, self._commands, self._camera.resolution)
-                        elif ready is web_socket:
+                        
+                        if ready is web_socket:
                             client = WsProtoClient(name, sock, self._commands, self._camera.resolution)
-                        elif ready is annexb_socket:
-                            client = AnnexbClient(name, sock, self._commands)
+                        
                         logger.info('New %s connection from %s', client.TYPE, name)
 
                         self._clients.add(client).start()
@@ -348,8 +346,9 @@ class StreamingServer:
         frame_type = data[4] & 0b00011111
         if frame_type in ALLOWED_NALS:
             states = {client.send_video(frame_type, data) for client in self._enabled_clients}
-            if ClientState.ENABLED_NEEDS_SPS in states:
-                logger.info('Requesting key frame')
+            
+            # if ClientState.ENABLED_NEEDS_SPS in states:
+            #     logger.info('Requesting key frame')
                 # self._camera.request_key_frame()
 
 class ClientLogger(logging.LoggerAdapter):
@@ -402,6 +401,7 @@ class Client:
                         self._state = ClientState.ENABLED
             elif self._state == ClientState.ENABLED:
                 dropped = self._queue_video(data)
+                
                 if dropped:
                     self._state = ClientState.ENABLED_NEEDS_SPS
             return self._state
@@ -416,7 +416,9 @@ class Client:
         self._commands.put((self, command))
 
     def _queue_message(self, message, replace_last=False):
+        
         dropped = self._tx_q.put(message, replace_last)
+        
         if dropped:
             self._logger.warning('Running behind, dropping messages')
         return dropped
@@ -480,6 +482,7 @@ class ProtoClient(Client):
         self._resolution = resolution
 
     def _queue_video(self, data):
+        
         return self._queue_message(VideoMessage(data))
 
     def _queue_overlay(self, svg):
@@ -671,25 +674,3 @@ class WsProtoClient(ProtoClient):
         raise Exception('Unsupported request')
 
 
-class AnnexbClient(Client):
-    TYPE = 'annexb'
-
-    def __init__(self, name, sock, command_queue):
-        super().__init__(name, sock, command_queue)
-        self._state = ClientState.ENABLED_NEEDS_SPS
-        self._send_command(ClientCommand.ENABLE)
-
-    def _queue_video(self, data):
-        return self._queue_message(data)
-
-    def _queue_overlay(self, svg):
-        pass  # Ignore overlays.
-
-    def _send_message(self, message):
-        self._socket.sendall(message)
-
-    def _receive_message(self):
-        buf = self._socket.recv(1024)
-        if not buf:
-            return None
-        raise RuntimeError('Invalid state.')

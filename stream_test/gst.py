@@ -44,16 +44,13 @@ def parse_format(src):
     return None
 
 def max_inner_size(what, where):
-    # Example: what=(800, 600) where=(300, 300) => (300, 225)
-    return what * min(where.width / what.width, where.height / what.height)
+    pass
 
 def min_outer_size(what, where):
-    # Example: what=(300, 300), where=(800, 600) => (800, 800)
-    return what * max(where.width / what.width, where.height / what.height)
+    pass
 
 def center_inside(inner, outer):
-    return int((outer.width - inner.width) / 2), int((outer.height - inner.height) / 2), \
-           inner.width, inner.height
+    pass
 
 def escape(s):
     return s.replace(' ', '\\ ') if isinstance(s, str) else s

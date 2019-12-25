@@ -136,15 +136,12 @@ def save_frame(rgb, size, overlay=None, ext='png'):
             f.write(overlay)
         print('Overlay saved as "%s"' % name)
 
-Layout = collections.namedtuple('Layout', ('size', 'window', 'inference_size', 'render_size'))
+Layout = collections.namedtuple('Layout', ('render_size'))
 
-def make_layout(inference_size, render_size):
-    inference_size = Size(*inference_size)
+def make_layout(render_size):
+    
     render_size = Size(*render_size)
-    size = min_outer_size(inference_size, render_size)
-    window = center_inside(render_size, size)
-    return Layout(size=size, window=window,
-                  inference_size=inference_size, render_size=render_size)
+    return Layout(render_size=render_size)
 
 def caps_size(caps):
     structure = caps.get_structure(0)
