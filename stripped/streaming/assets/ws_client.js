@@ -23,8 +23,8 @@ function createPlayer(width, height, streamControl) {
   var cropDiv = document.createElement("div");
   cropDiv.style.overflow = "hidden";
   cropDiv.style.position = "absolute";
-  cropDiv.style.width = 320 + "px";
-  cropDiv.style.height = 210 + "px";
+  cropDiv.style.width = width + "px";
+  cropDiv.style.height = height + "px";
   
   cropDiv.appendChild(player.canvas);
   container.appendChild(cropDiv);
