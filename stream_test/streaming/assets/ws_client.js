@@ -23,14 +23,15 @@ function createPlayer(width, height, streamControl) {
   var cropDiv = document.createElement("div");
   cropDiv.style.overflow = "hidden";
   cropDiv.style.position = "absolute";
-  cropDiv.style.width = width + "px";
-  cropDiv.style.height = height + "px";
+  cropDiv.style.width = 320 + "px";
+  cropDiv.style.height = 210 + "px";
+  
   cropDiv.appendChild(player.canvas);
   container.appendChild(cropDiv);
 
   var canvas = document.createElement("canvas");
   canvas.id = "overlay"
-  canvas.style.position = "absolute";
+  canvas.style.position = "relative";
   canvas.width = width;
   canvas.height = height;
   container.appendChild(canvas);

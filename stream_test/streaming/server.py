@@ -69,6 +69,8 @@ def _file_content_type(path):
         return 'text/javascript; charset=utf-8'
     elif path.endswith('.css'):
         return 'text/css; charset=utf-8'
+    elif path.endswith('.svg'):
+        return'image/svg'
     elif path.endswith('.png'):
         return'image/png'
     elif path.endswith('.jpg') or path.endswith('.jpeg'):
@@ -85,7 +87,7 @@ def _asset_path(path):
         value = os.environ.get('SERVER_INDEX_HTML')
         if value is not None:
             return value
-        path  = 'index.html'
+        path  = 'test1.html'
     elif path[0] == '/':
         path = path[1:]
 
@@ -653,14 +655,19 @@ class WsProtoClient(ProtoClient):
 
     def _process_web_request(self):
         request = _read_http_request(self._socket)
+        print(request)
         request = HTTPRequest(request)
+        
         connection = request.headers['Connection']
+        
         upgrade = request.headers['Upgrade']
         if 'Upgrade' in connection and upgrade == 'websocket':
             sec_websocket_key = request.headers['Sec-WebSocket-Key']
             self._queue_message(_http_switching_protocols(sec_websocket_key))
             self._logger.info('Upgraded to WebSocket')
             return False
+        if request.command == 'POST':
+            print(request.path)
 
         if request.command == 'GET':
             content, content_type = _read_asset(request.path)
