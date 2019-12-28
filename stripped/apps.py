@@ -13,14 +13,61 @@
 # limitations under the License.
 
 import argparse
-import logging
-import signal
+import itertools
 
+import logging
+from flask import Flask, render_template, url_for, copy_current_request_context, Response, request
+from threading import Thread, active_count, Event
+import signal
+import threading
+import queue
 from camera import make_camera
 from gstreamer import Display, run_gen
 from streaming.server import StreamingServer
+from geventwebsocket.handler import WebSocketHandler
+from gevent.pywsgi import WSGIServer
+from flask_sockets import Sockets
 
-def run_server():
+
+app = Flask(__name__)
+sockets = Sockets(app)
+
+q = queue.Queue(maxsize=150)
+def svg(q):
+    while True:
+        
+        c = q.get()
+        yield c
+@app.route('/')
+def init():
+    return render_template('index.html')
+@app.route('/bytestream')
+def byte():
+        return Response(svg(q), content_type='text/event-stream')
+
+
+@sockets.route('/stream')
+def stream(socket):
+    t = svg(q)
+    for buffer in t:
+        if buffer:
+            
+            socket.send(buffer)
+
+
+# @sockets.route('/stream')
+# def stream(socket):
+#     # t = svg(q)
+#     # for buffer in t:
+#     #     if buffer:
+#     buffer = b'\x82\x0e\n\x06\x08\x80\x05\x10\xe0\x03P\x81\xe1\xbf\xff\x0f'
+#     buffer = b'\x82)\x1a!\n\x1f\x00\x00\x00\x01gB\xc0\x1e\xda\x02\x80\xf6\xc0Z\x83\x00\x82\xd2\x80\x00\x00\x03\x00\x80\x00\x00\x1eG\x8b\x17PP\xd5\x91\xec\xf7\x17'
+#     buffer = b'\x82\x0e\n\x06\x08\x80\x05\x10\xe0\x03P\x82\xcf\xb0\xcb\x17'
+#     message = socket.receive()
+#     print(message)
+#     socket.send(buffer)
+
+def run_server(q):
     logging.basicConfig(level=logging.INFO)
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -36,9 +83,26 @@ def run_server():
 
   
     camera = make_camera(args.source)
-    
+  
 
-    with StreamingServer(camera, args.bitrate) as server:
+    with StreamingServer(camera, q, args.bitrate) as server:
         
         signal.pause()
 
+def main():
+    
+
+    
+    t1 = threading.Thread(target=run_server, name=run_server, args=(q,))
+
+    t1.start()
+    t1.deamon = True
+    http_server = WSGIServer(('',5000), app, handler_class=WebSocketHandler)
+    http_server.serve_forever()
+
+    #app.run(host="0.0.0.0", debug=False)
+    
+    
+       
+if __name__ == '__main__':
+    main()

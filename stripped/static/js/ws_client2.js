@@ -1,7 +1,7 @@
 function createPlayer(width, height, streamControl) {
   var player = new Player({
     useWorker: true,
-    workerFile: "broadway/Decoder.js",
+    workerFile: "/static/js/broadway/Decoder.js",
     reuseMemory: true,
     webgl: "auto",
     size: {
@@ -40,7 +40,7 @@ function createPlayer(width, height, streamControl) {
 }
 
 window.onload = function() {
-  protobuf.load("messages.proto", function(err, root) {
+  protobuf.load("/static/js/messages.proto", function(err, root) {
     if (err)
       throw err;
 
@@ -49,8 +49,11 @@ window.onload = function() {
 
     function streamControl(enabled) {
         serverBound = ServerBound.create({streamControl: {enabled:enabled}});
-        socket.send(ServerBound.encode(serverBound).finish());
         console.log(ServerBound.encode(serverBound).finish())
+        socket.send(ServerBound.encode(serverBound).finish());
+       
+  
+        
     }
 
     var player = null;
@@ -68,7 +71,6 @@ window.onload = function() {
     };
 
     socket.onmessage = function(event) {
-
       function buf2hex(buffer) { // buffer is an ArrayBuffer
         return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
       }
@@ -76,12 +78,21 @@ window.onload = function() {
       
       
       var x = event.data
-     // console.log(x);
-      
+      console.log(x);
+      var y = x.slice(2);
 
-//      console.log(buf2hex(x));
-      var clientBound = ClientBound.decode(new Uint8Array(event.data))
-     // console.log(clientBound.message, "clientbound message")
+      //console.log(y.byteLength, "1")
+      if (y.byteLength > 100) {
+        var y = y.slice(2)
+        //  block of code to be executed if the condition is true
+      } 
+     // console.log(y.byteLength, "2")
+
+
+      //console.log(buf2hex(y));
+      
+      var clientBound = ClientBound.decode(new Uint8Array(y))
+      //console.log(clientBound, "CLIENT BOUN", clientBound.message)
       switch (clientBound.message) {
         case 'start':
           console.log('Starting...')
@@ -94,7 +105,7 @@ window.onload = function() {
           break;
         case 'video':
           player.decode(clientBound.video.data);
-          
+          console.log(clientBound.video.data)
           break;
         case 'overlay':
           var canvas = document.getElementById("overlay");

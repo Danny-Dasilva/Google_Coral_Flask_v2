@@ -35,6 +35,7 @@ ALLOWED_NALS = {NAL.CODED_SLICE_NON_IDR,
                 NAL.SEI}
 
 def StartMessage(resolution):
+    
     width, height = resolution
     return pb2.ClientBound(timestamp_us=int(time.monotonic() * 1000000),
                            start=pb2.Start(width=width, height=height))
@@ -250,10 +251,11 @@ class StreamingServer:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def __init__(self, camera, bitrate=1000000, mdns_name=None,
+    def __init__(self, camera, q, bitrate=1000000, mdns_name=None,
                  tcp_port=4665, web_port=5001, annexb_port=4666):
         self._bitrate = bitrate
         self._camera = camera
+        self.q = q
         self._clients = AtomicSet()
         self._enabled_clients = AtomicSet()
         self._done = threading.Event()
@@ -327,7 +329,7 @@ class StreamingServer:
                         name = '%s:%d' % addr
                         
                         if ready is web_socket:
-                            client = WsProtoClient(name, sock, self._commands, self._camera.resolution)
+                            client = WsProtoClient(name, sock, self._commands, self._camera.resolution, self.q)
                         
                         logger.info('New %s connection from %s', client.TYPE, name)
 
@@ -347,6 +349,7 @@ class StreamingServer:
         assert data[0:4] == b'\x00\x00\x00\x01'
         frame_type = data[4] & 0b00011111
         if frame_type in ALLOWED_NALS:
+            
             states = {client.send_video(frame_type, data) for client in self._enabled_clients}
             
             # if ClientState.ENABLED_NEEDS_SPS in states:
@@ -368,13 +371,14 @@ class ClientCommand(Enum):
     DISABLE = 3
 
 class Client:
-    def __init__(self, name, sock, command_queue):
+    def __init__(self, name, sock, command_queue, q):
         self._lock = threading.Lock()  # Protects _state.
         self._state = ClientState.DISABLED
         self._logger = ClientLogger(logger, {'name': name})
         self._socket = sock
         self._commands = command_queue
         self._tx_q = DroppingQueue(15)
+        self.q = q
         self._rx_thread = threading.Thread(target=self._rx_run)
         self._tx_thread = threading.Thread(target=self._tx_run)
 
@@ -421,6 +425,7 @@ class Client:
         
         dropped = self._tx_q.put(message, replace_last)
         
+        
         if dropped:
             self._logger.warning('Running behind, dropping messages')
         return dropped
@@ -445,6 +450,7 @@ class Client:
                 message = self._receive_message()
                 if message is None:
                     break
+                
                 self._handle_message(message)
             self._logger.info('Rx thread finished')
         except Exception as e:
@@ -479,8 +485,8 @@ class Client:
 class ProtoClient(Client):
     TYPE = 'tcp'
 
-    def __init__(self, name, sock, command_queue, resolution):
-        super().__init__(name, sock, command_queue)
+    def __init__(self, name, sock, command_queue, resolution, q):
+        super().__init__(name, sock, command_queue, q)
         self._resolution = resolution
 
     def _queue_video(self, data):
@@ -518,8 +524,8 @@ class ProtoClient(Client):
 
     def _send_message(self, message):
         buf = message.SerializeToString()
-        self._socket.sendall(struct.pack('!I', len(buf)))
-        self._socket.sendall(buf)
+        #self._socket.sendall(struct.pack('!I', len(buf)))
+        #self._socket.sendall(buf)
 
     def _receive_message(self):
         buf = self._receive_bytes(4)
@@ -573,8 +579,8 @@ class WsProtoClient(ProtoClient):
                 buf.extend(self.payload)
             return bytes(buf)
 
-    def __init__(self, name, sock, command_queue, resolution):
-        super().__init__(name, sock, command_queue, resolution)
+    def __init__(self, name, sock, command_queue, resolution, q):
+        super().__init__(name, sock, command_queue, resolution, q)
         self._upgraded = False
 
     def _receive_message(self):
@@ -586,7 +592,9 @@ class WsProtoClient(ProtoClient):
 
             packets = []
             while True:
+                print("thread lmao")
                 packet = self._receive_packet()
+               
                 if packet.opcode == 0:
                     # Continuation
                     if not packets:
@@ -604,6 +612,7 @@ class WsProtoClient(ProtoClient):
                         joined = bytearray()
                         for p in packets:
                             joined.extend(p.payload)
+                        print(_parse_server_message(joined), "parse message")
                         return _parse_server_message(joined)
                 elif packet.opcode == 8:
                     # Close.
@@ -644,18 +653,26 @@ class WsProtoClient(ProtoClient):
     def _send_message(self, message):
         if isinstance(message, (bytes, bytearray)):
             buf = message
+            
         else:
             if isinstance(message, self.WsPacket):
                 packet = message
             else:
                 packet = self.WsPacket()
                 packet.append(message.SerializeToString())
+                
             buf = packet.serialize()
+            #buf = b'\x82\x0e\n\x06\x08\x80\x05\x10\xe0\x03P\x81\xe1\xbf\xff\x0f'
+            #buf = b'\x82\x0e\n\x06\x08\x80\x05\x10\xe0\x03P\x82\xcf\xb0\xcb\x17'
+            #buf = b'\x82)\x1a!\n\x1f\x00\x00\x00\x01gB\xc0\x1e\xda\x02\x80\xf6\xc0Z\x83\x00\x82\xd2\x80\x00\x00\x03\x00\x80\x00\x00\x1eG\x8b\x17PP\xd5\x91\xec\xf7\x17'
+
+            self.q.put(buf)
+            
         self._socket.sendall(buf)
 
     def _process_web_request(self):
         request = _read_http_request(self._socket)
-        print(request)
+        
         request = HTTPRequest(request)
         
         connection = request.headers['Connection']
@@ -679,5 +696,6 @@ class WsProtoClient(ProtoClient):
             return True
 
         raise Exception('Unsupported request')
+
 
 
