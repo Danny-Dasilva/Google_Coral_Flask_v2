@@ -1,25 +1,17 @@
-import base64
 import contextlib
-import hashlib
-import io
-import os
+
 import logging
 import queue
-import select
-import socket
 import struct
-import subprocess
-import sys
 import threading
 import time
-
-from enum import Enum
-from http.server import BaseHTTPRequestHandler
+from time import sleep
 from itertools import cycle
+from enum import Enum
 
 from .proto import messages_pb2 as pb2
 
-logger = logging.getLogger(__name__)
+Logger = logging.getLogger(__name__)
 
 class NAL:
     CODED_SLICE_NON_IDR = 1  # Coded slice of a non-IDR picture
@@ -56,113 +48,6 @@ def _parse_server_message(data):
     message = pb2.ServerBound()
     message.ParseFromString(data)
     return message
-
-def _shutdown(sock):
-    try:
-        sock.shutdown(socket.SHUT_RDWR)
-    except OSError:
-        pass
-
-def _file_content_type(path):
-    if path.endswith('.html'):
-        return 'text/html; charset=utf-8'
-    elif path.endswith('.js'):
-        return 'text/javascript; charset=utf-8'
-    elif path.endswith('.css'):
-        return 'text/css; charset=utf-8'
-    elif path.endswith('.svg'):
-        return'image/svg'
-    elif path.endswith('.png'):
-        return'image/png'
-    elif path.endswith('.jpg') or path.endswith('.jpeg'):
-        return'image/jpeg'
-    elif path.endswith('.wasm'):
-        return'application/wasm'
-    else:
-        return 'application/octet-stream'
-
-BASE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), 'assets'))
-
-def _asset_path(path):
-    if path == '/':
-        value = os.environ.get('SERVER_INDEX_HTML')
-        if value is not None:
-            return value
-        path  = 'index.html'
-    elif path[0] == '/':
-        path = path[1:]
-
-    asset_path = os.path.abspath(os.path.join(BASE_PATH, path))
-    if os.path.commonpath((BASE_PATH, asset_path)) != BASE_PATH:
-        return None
-
-    return asset_path
-
-def _read_asset(path):
-    asset_path = _asset_path(path)
-    if asset_path is not None:
-        with contextlib.suppress(Exception):
-            with open(asset_path, 'rb') as f:
-                return f.read(), _file_content_type(asset_path)
-    return None, None
-
-
-class HTTPRequest(BaseHTTPRequestHandler):
-
-    def __init__(self, request_buf):
-        self.rfile = io.BytesIO(request_buf)
-        self.raw_requestline = self.rfile.readline()
-        self.parse_request()
-
-
-def _read_http_request(sock):
-    request = bytearray()
-    while b'\r\n\r\n' not in request:
-        buf = sock.recv(2048)
-        if not buf:
-            break
-        request.extend(buf)
-    return request
-
-
-def _http_ok(content, content_type):
-    header = (
-        'HTTP/1.1 200 OK\r\n'
-        'Content-Length: %d\r\n'
-        'Content-Type: %s\r\n'
-        'Connection: Keep-Alive\r\n\r\n'
-    ) % (len(content), content_type)
-    return header.encode('ascii') + content
-
-
-def _http_switching_protocols(token):
-    accept_token = token.encode('ascii') + b'258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
-    accept_token = hashlib.sha1(accept_token).digest()
-    header = (
-        'HTTP/1.1 101 Switching Protocols\r\n'
-        'Upgrade: WebSocket\r\n'
-        'Connection: Upgrade\r\n'
-        'Sec-WebSocket-Accept: %s\r\n\r\n'
-    ) % base64.b64encode(accept_token).decode('ascii')
-    return header.encode('ascii')
-
-
-def _http_not_found():
-    return 'HTTP/1.1 404 Not Found\r\n\r\n'.encode('ascii')
-
-
-@contextlib.contextmanager
-def Socket(port):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(('', port))
-    sock.listen()
-    try:
-        yield sock
-    finally:
-        _shutdown(sock)
-        sock.close()
-
 
 class DroppingQueue:
 
@@ -214,26 +99,6 @@ class AtomicSet:
         with self._lock:
             return iter(self._set.copy())
 
-class PresenceServer:
-
-    SERVICE_TYPE = '_aiy_vision_video._tcp'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-
-    def __init__(self, name, port):
-        logger.info('Start publishing %s on port %d.', name, port)
-        cmd = ['avahi-publish-service', name, self.SERVICE_TYPE, str(port), 'AIY Streaming']
-        self._process = subprocess.Popen(cmd, shell=False)
-
-    def close(self):
-        self._process.terminate()
-        self._process.wait()
-        logger.info('Stop publishing.')
-
 
 class StreamingServer:
 
@@ -243,8 +108,7 @@ class StreamingServer:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def __init__(self, camera, q, bitrate=1000000, mdns_name=None,
-                 tcp_port=4665, web_port=5001, annexb_port=4666):
+    def __init__(self, camera, q, bitrate=1000000,):
         self._bitrate = bitrate
         self._camera = camera
         self.q = q
@@ -252,8 +116,7 @@ class StreamingServer:
         self._enabled_clients = AtomicSet()
         self._done = threading.Event()
         self._commands = queue.Queue()
-        self._thread = threading.Thread(target=self._run,
-                                        args=(mdns_name, tcp_port, web_port, annexb_port))
+        self._thread = threading.Thread(target=self._run)
         self._thread.start()
         self._start_recording()
         client = Clientt(self._commands, self._camera.resolution, self.q)
@@ -267,70 +130,45 @@ class StreamingServer:
   
 
     def _start_recording(self):
-        logger.info('Camera start recording')
+        Logger.info('Camera start recording')
         self._camera.start_recording(self, format='h264', profile='baseline',
             inline_headers=True, bitrate=self._bitrate, intra_period=0)
 
     def _stop_recording(self):
-        logger.info('Camera stop recording')
+        Logger.info('Camera stop recording')
         self._camera.stop_recording()
 
     def _process_command(self, client, command):
-        was_streaming = bool(self._enabled_clients)
-        print(client, "cliennnnnnnnnnnnt")
         if command is ClientCommand.ENABLE:
             self._enabled_clients.add(client)
         
         elif command == ClientCommand.STOP:
        
             client.stop()
-            logger.info('Number of active clients: %d', len(self._clients))
-
-        is_streaming = bool(self._enabled_clients)
+            Logger.info('Number of active clients: %d', len(self._clients))
 
 
-    def _run(self, mdns_name, tcp_port, web_port, annexb_port):
-        try:
-            with contextlib.ExitStack() as stack:
-                logger.info('Listening on ports tcp: %d, web: %d, annexb: %d',
-                            tcp_port, web_port, annexb_port)
-                tcp_socket = stack.enter_context(Socket(tcp_port))
-                web_socket = stack.enter_context(Socket(web_port))
-                
-                if mdns_name:
-                    stack.enter_context(PresenceServer(mdns_name, tcp_port))
+    def _run(self):
+        try:               
 
-                socks = (tcp_socket, web_socket)
-                while not self._done.is_set():
-                    # Process available client commands.
-                    try:
-                        while True:
-                            client, command = self._commands.get_nowait()
-                            self._process_command(client, command)
-                    except queue.Empty:
-                        pass  # Done processing commands.
+            while not self._done.is_set():
+                # Process available client commands.
+                try:
+                    while True:
+                        client, command = self._commands.get_nowait()
+                        self._process_command(client, command)
+                except queue.Empty:
+                    pass  # Done processing commands.
 
-                    # Process recently connected clients.
-                    rlist, _, _ = select.select(socks, [], [], 0.2)  # 200ms
-                    for ready in rlist:
-                        sock, addr = ready.accept()
-                        name = '%s:%d' % addr
-                        
-                        if ready is web_socket:
-                            client = WsProtoClient(name, sock, self._commands, self._camera.resolution, self.q)
-                        
-                        logger.info('New %s connection from %s', client.TYPE, name)
-
-                        self._clients.add(client).start()
-                        logger.info('Number of active clients: %d', len(self._clients))
+                sleep(.02) # supposed to be 200 ms
         finally:
-            logger.info('Server is shutting down')
+            Logger.info('Server is shutting down')
             if self._enabled_clients:
                 self._stop_recording()
 
             for client in self._clients:
                 client.stop()
-            logger.info('Done')
+            Logger.info('Done')
 
     def write(self, data):
         """Called by camera thread for each compressed frame."""
@@ -338,12 +176,7 @@ class StreamingServer:
         frame_type = data[4] & 0b00011111
         if frame_type in ALLOWED_NALS:
 
-            
             states = {client.send_video(frame_type, data) for client in self._enabled_clients}
-            #WsProtoClient(name, sock, self._commands, self._camera.resolution, self.q).send_videoo(frame_type, data)
-            # if ClientState.ENABLED_NEEDS_SPS in states:
-            #     logger.info('Requesting key frame')
-                # self._camera.request_key_frame()
 
 class ClientLogger(logging.LoggerAdapter):
     def process(self, msg, kwargs):
@@ -363,7 +196,7 @@ class Clientt:
     def __init__(self, command_queue, resolution, q):
         self._lock = threading.Lock()  # Protects _state.
         self._state = ClientState.DISABLED
-        self._logger = ClientLogger(logger, {'name': "dabonem"})
+        self._Logger = ClientLogger(Logger, {'name': "Orange_logger"})
         self._commands = command_queue
         self._tx_q = DroppingQueue(15)
         self.q = q
@@ -415,11 +248,11 @@ class Clientt:
         self._tx_thread.start()
 
     def stop(self):
-        self._logger.info('Stopping...')
+        self._Logger.info('Stopping...')
         self._tx_q.put(None)
         self._tx_thread.join()
         self._rx_thread.join()
-        self._logger.info('Stopped.')
+        self._Logger.info('Stopped.')
 
     def _queue_video(self, data):
         
@@ -454,7 +287,7 @@ class Clientt:
         
         
         if dropped:
-            self._logger.warning('Running behind, dropping messages')
+            self._Logger.warning('Running behind, dropping messages')
         return dropped
 
     def _tx_run(self):
@@ -464,9 +297,9 @@ class Clientt:
                 if message is None:
                     break
                 self._send_message(message)
-            self._logger.info('Tx thread finished')
+            self._Logger.info('Tx thread finished')
         except Exception as e:
-            self._logger.warning('Tx thread failed: %s', e)
+            self._Logger.warning('Tx thread failed: %s', e)
 
         # Tx thread stops the client in any situation.
         self._send_command(ClientCommand.STOP)
@@ -496,23 +329,13 @@ class Clientt:
 
     def _handle_stream_control(self):
         enabled = True
-        
-        self._logger.info('stream_control %s', enabled)
+        self._Logger.info('stream_control %s', enabled)
 
         with self._lock:
             
          
-            self._logger.info('Enabling client')
+            self._Logger.info('Enabling client')
             self._state = ClientState.ENABLED_NEEDS_SPS
             self._queue_message(StartMessage(self._resolution))
             self._send_command(ClientCommand.ENABLE)
 
-
-    def _receive_bytes(self, num_bytes):
-        received = bytearray()
-        while len(received) < num_bytes:
-            buf = self._socket.recv(num_bytes - len(received))
-            if not buf:
-                return buf
-            received.extend(buf)
-        return received

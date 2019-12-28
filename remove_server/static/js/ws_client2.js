@@ -49,7 +49,7 @@ window.onload = function() {
 
     function streamControl(enabled) {
         serverBound = ServerBound.create({streamControl: {enabled:enabled}});
-        console.log(ServerBound.encode(serverBound).finish())
+       
         socket.send(ServerBound.encode(serverBound).finish());
        
   
@@ -78,7 +78,7 @@ window.onload = function() {
       
       
       var x = event.data
-      console.log(x);
+     
       var y = x.slice(2);
 
       //console.log(y.byteLength, "1")
@@ -86,10 +86,7 @@ window.onload = function() {
         var y = y.slice(2)
         //  block of code to be executed if the condition is true
       } 
-     // console.log(y.byteLength, "2")
-
-
-      //console.log(buf2hex(y));
+ 
       
       var clientBound = ClientBound.decode(new Uint8Array(y))
       //console.log(clientBound, "CLIENT BOUN", clientBound.message)
