@@ -15,11 +15,12 @@
 import argparse
 
 import logging
-from flask import Flask, render_template, url_for, copy_current_request_context, Response, request
+from flask import Flask, render_template, url_for, Response, request
 import signal
 import threading
 import queue
 from camera import make_camera
+from streaming.server import StreamingServer
 from geventwebsocket.handler import WebSocketHandler
 from gevent.pywsgi import WSGIServer
 from flask_sockets import Sockets
@@ -30,8 +31,7 @@ sockets = Sockets(app)
 
 q = queue.Queue(maxsize=150)
 def svg(q):
-    while True:
-        
+    while True:  
         c = q.get()
         yield c
 @app.route('/')
