@@ -13,13 +13,17 @@
 # limitations under the License.
 
 import argparse
+import itertools
 
 import logging
 from flask import Flask, render_template, url_for, copy_current_request_context, Response, request
+from threading import Thread, active_count, Event
 import signal
 import threading
 import queue
 from camera import make_camera
+from gstreamer import Display, run_gen
+from streaming.server import StreamingServer
 from geventwebsocket.handler import WebSocketHandler
 from gevent.pywsgi import WSGIServer
 from flask_sockets import Sockets
@@ -57,7 +61,7 @@ def stream(socket):
 #     # for buffer in t:
 #     #     if buffer:
 #     buffer = b'\x82\x0e\n\x06\x08\x80\x05\x10\xe0\x03P\x81\xe1\xbf\xff\x0f'
-#     buffer = b'\x82)\x1a!\n\x1f\x00\x00\x00\x01gB\xc0\x1e\xda\x02\x80\xf6\xc0Z\x83\x00\x82\xd2\x80\x00\x00\x03\x00\x80\x00\x00\x1eG\x8b\x17PP\xd5\x91\xec\xf7\x170\x00\x00\x01gB\xc0\x1e\xda\x02\x80\xf6\xc0Z\x83\x00\x82\xd2\x80\x00\x00\x03\x00\x80\x00\x00\x1eG\x8b\x17PP\xd5\x91\xec\xf7\x17'
+#     buffer = b'\x82)\x1a!\n\x1f\x00\x00\x00\x01gB\xc0\x1e\xda\x02\x80\xf6\xc0Z\x83\x00\x82\xd2\x80\x00\x00\x03\x00\x80\x00\x00\x1eG\x8b\x17PP\xd5\x91\xec\xf7\x17'
 #     buffer = b'\x82\x0e\n\x06\x08\x80\x05\x10\xe0\x03P\x82\xcf\xb0\xcb\x17'
 #     message = socket.receive()
 #     print(message)
