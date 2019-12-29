@@ -24,13 +24,16 @@ import queue
 from camera import make_camera
 from gstreamer import Display, run_gen
 from streaming.server import StreamingServer
-from geventwebsocket.handler import WebSocketHandler
-from gevent.pywsgi import WSGIServer
-from flask_sockets import Sockets
+from flask_socketio import SocketIO, emit
 
+
+async_mode = 'gevent'
 
 app = Flask(__name__)
-sockets = Sockets(app)
+app.config['SECRET_KEY'] = 'secret!'
+socketio = SocketIO(app, async_mode=async_mode)
+thread = None
+
 
 q = queue.Queue(maxsize=150)
 def svg(q):
@@ -38,34 +41,40 @@ def svg(q):
         
         c = q.get()
         yield c
+@socketio.on('update')
+def update(msg):
+    print(msg, "callllled")
+    t = svg(q)
+    for buffer in t:
+        print(len(buffer), "gifff")
+
+        socketio.sleep(.02)
+        #  buffer = b'\x82\x0e\n\x06\x08\x80\x05\x10\xe0\x03P\x82\xcf\xb0\xcb\x17'
+        socketio.emit('my_response', buffer, namespace='/test')
+
+@socketio.on('my_event')
+def test_message(message):
+    print(message, "emit test")
+    t = svg(q)
+    for buffer in t:
+        socketio.sleep(.02)
+        
+        #  buffer = b'\x82\x0e\n\x06\x08\x80\x05\x10\xe0\x03P\x82\xcf\xb0\xcb\x17'
+        socketio.emit('my_response', buffer, broadcast=True)
+
+    # print(message, "emit test")
+        
 @app.route('/')
 def init():
-    return render_template('index.html')
+    return render_template('skio.html')
 @app.route('/bytestream')
 def byte():
         return Response(svg(q), content_type='text/event-stream')
 
 
-@sockets.route('/stream')
-def stream(socket):
-    t = svg(q)
-    for buffer in t:
-        if buffer:
-            
-            socket.send(buffer)
 
 
-# @sockets.route('/stream')
-# def stream(socket):
-#     # t = svg(q)
-#     # for buffer in t:
-#     #     if buffer:
-#     buffer = b'\x82\x0e\n\x06\x08\x80\x05\x10\xe0\x03P\x81\xe1\xbf\xff\x0f'
-#     buffer = b'\x82)\x1a!\n\x1f\x00\x00\x00\x01gB\xc0\x1e\xda\x02\x80\xf6\xc0Z\x83\x00\x82\xd2\x80\x00\x00\x03\x00\x80\x00\x00\x1eG\x8b\x17PP\xd5\x91\xec\xf7\x17'
-#     buffer = b'\x82\x0e\n\x06\x08\x80\x05\x10\xe0\x03P\x82\xcf\xb0\xcb\x17'
-#     message = socket.receive()
-#     print(message)
-#     socket.send(buffer)
+
 
 def run_server(q):
     logging.basicConfig(level=logging.INFO)
@@ -97,9 +106,8 @@ def main():
 
     t1.start()
     t1.deamon = True
-    http_server = WSGIServer(('',5000), app, handler_class=WebSocketHandler)
-    http_server.serve_forever()
-
+    socketio.run(app, host="0.0.0.0", debug=False)
+    
     #app.run(host="0.0.0.0", debug=False)
     
     

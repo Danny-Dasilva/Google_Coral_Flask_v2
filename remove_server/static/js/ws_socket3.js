@@ -49,7 +49,7 @@ window.onload = function() {
 
     function streamControl(enabled) {
         serverBound = ServerBound.create({streamControl: {enabled:enabled}});
-        console.log(ServerBound.encode(serverBound).finish())
+       
         socket.send(ServerBound.encode(serverBound).finish());
        
   
@@ -57,28 +57,32 @@ window.onload = function() {
     }
 
     var player = null;
-    var socket = new WebSocket("ws://" + window.location.host + "/stream");
-    console.log(window.location.host)
-    socket.binaryType = "arraybuffer";
 
-    socket.onopen = function(event) {
+ 
+  //  socket.binaryType = "arraybuffer";
+
+    socket.on('connect', function() {
       console.log("Socket connected.");
       streamControl(true);
-    };
+      data = "sick"
+
+      socket.emit('my_event', "aaaaaa");
+      console.log("emit")
+    });
 
     socket.onclose = function(event) {
       console.log("Socket closed.");
     };
 
-    socket.onmessage = function(event) {
+    socket.on('my_response', function(event) {
+      
       function buf2hex(buffer) { // buffer is an ArrayBuffer
         return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
       }
       
-      
-      
-      var x = event.data
-      console.log(x);
+      var x = event
+      console.log(x)
+     
       var y = x.slice(2);
 
       //console.log(y.byteLength, "1")
@@ -86,10 +90,8 @@ window.onload = function() {
         var y = y.slice(2)
         //  block of code to be executed if the condition is true
       } 
-     // console.log(y.byteLength, "2")
-
-
-      //console.log(buf2hex(y));
+      //console.log(buf2hex(y))
+ 
       
       var clientBound = ClientBound.decode(new Uint8Array(y))
       //console.log(clientBound, "CLIENT BOUN", clientBound.message)
@@ -121,6 +123,6 @@ window.onload = function() {
           console.log("Stopped.");
           break;
       }
-    };
+    });
   });
 };

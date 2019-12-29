@@ -51,6 +51,7 @@ window.onload = function() {
         serverBound = ServerBound.create({streamControl: {enabled:enabled}});
        
         socket.send(ServerBound.encode(serverBound).finish());
+        // console.log(ServerBound.encode(serverBound).finish())
        
   
         
@@ -80,15 +81,23 @@ window.onload = function() {
       var x = event.data
      
       var y = x.slice(2);
+      
 
       //console.log(y.byteLength, "1")
-      if (y.byteLength > 100) {
+      if (y.byteLength > 129) {
         var y = y.slice(2)
         //  block of code to be executed if the condition is true
       } 
  
+      try {
+        var clientBound = ClientBound.decode(new Uint8Array(y))
+      } catch (err){
+        console.log(buf2hex(y), y.byteLength, err, "error")
+        
+
+      }
+
       
-      var clientBound = ClientBound.decode(new Uint8Array(y))
       //console.log(clientBound, "CLIENT BOUN", clientBound.message)
       switch (clientBound.message) {
         case 'start':
@@ -102,7 +111,6 @@ window.onload = function() {
           break;
         case 'video':
           player.decode(clientBound.video.data);
-          console.log(clientBound.video.data)
           break;
         case 'overlay':
           var canvas = document.getElementById("overlay");

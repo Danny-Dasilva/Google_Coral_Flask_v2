@@ -1,7 +1,23 @@
-function createPlayer(width, height, streamControl) {
+<!doctype html>
+<html>
+<head>
+  <title>Coral Web Panel</title>
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon.png"/>
+  <link rel="stylesheet" type="text/css" href="/static/css/coral.css">
+  <script type="text/javascript" src="/static/js/protobuf.min.js"></script>
+  <script type="text/javascript" src="/static/js/broadway/YUVCanvas.js"></script>
+  <script type="text/javascript" src="/static/js/broadway/Decoder.js"></script>
+  <script type="text/javascript" src="/static/js/broadway/Player.js"></script>
+  <!-- <script type="text/javascript" src="/static/js/ws_socket3.js"></script> -->
+  <script src="//code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" integrity="sha256-yr4fRk/GU1ehYJPAs8P4JlTgu0Hdsp4ZKrx8bDEDC3I=" crossorigin="anonymous"></script>
+ 
+  <script type="text/javascript" charset="utf-8">
+    $(document).ready(function() {
+      function createPlayer(width, height, streamControl) {
   var player = new Player({
     useWorker: true,
-    workerFile: "broadway/Decoder.js",
+    workerFile: "/static/js/broadway/Decoder.js",
     reuseMemory: true,
     webgl: "auto",
     size: {
@@ -40,7 +56,7 @@ function createPlayer(width, height, streamControl) {
 }
 
 window.onload = function() {
-  protobuf.load("messages.proto", function(err, root) {
+  protobuf.load("/static/js/messages.proto", function(err, root) {
     if (err)
       throw err;
 
@@ -49,39 +65,41 @@ window.onload = function() {
 
     function streamControl(enabled) {
         serverBound = ServerBound.create({streamControl: {enabled:enabled}});
+       
         socket.send(ServerBound.encode(serverBound).finish());
-        console.log(ServerBound.encode(serverBound).finish())
+       
+  
+        
     }
 
     var player = null;
-    var socket = new WebSocket("ws://" + window.location.host + "/stream");
-    console.log(window.location.host)
-    socket.binaryType = "arraybuffer";
 
-    socket.onopen = function(event) {
-      console.log("Socket connected.");
-      streamControl(true);
-    };
 
-    socket.onclose = function(event) {
-      console.log("Socket closed.");
-    };
+        var socket = io.connect('http://' + document.domain + ':' + location.port);
 
-    socket.onmessage = function(event) {
-
-      function buf2hex(buffer) { // buffer is an ArrayBuffer
+        socket.on('connect', function() {
+            console.log("test")
+            socket.emit('my_event', "aaaaaa");
+        });
+        socket.on('my_response', function(event) {
+          function buf2hex(buffer) { // buffer is an ArrayBuffer
         return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
       }
       
-      
-      
-      var x = event.data
-     // console.log(x);
-      
+      var x = event
+     
+      var y = x.slice(2);
 
-//      console.log(buf2hex(x));
-      var clientBound = ClientBound.decode(new Uint8Array(event.data))
-     // console.log(clientBound.message, "clientbound message")
+      //console.log(y.byteLength, "1")
+      if (y.byteLength > 100) {
+        var y = y.slice(2)
+        //  block of code to be executed if the condition is true
+      } 
+      //console.log(buf2hex(y))
+ 
+      
+      var clientBound = ClientBound.decode(new Uint8Array(y))
+      //console.log(clientBound, "CLIENT BOUN", clientBound.message)
       switch (clientBound.message) {
         case 'start':
           console.log('Starting...')
@@ -94,7 +112,7 @@ window.onload = function() {
           break;
         case 'video':
           player.decode(clientBound.video.data);
-          
+          console.log(clientBound.video.data)
           break;
         case 'overlay':
           var canvas = document.getElementById("overlay");
@@ -110,6 +128,23 @@ window.onload = function() {
           console.log("Stopped.");
           break;
       }
-    };
+        });
+      
+    });
+  };
   });
-};
+
+
+
+</script>
+ 
+</head>
+<body>
+
+ 
+
+  <div id="container"></div>
+   
+
+</body>
+</html>
