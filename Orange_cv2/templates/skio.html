@@ -1,0 +1,150 @@
+<!doctype html>
+<html>
+<head>
+  <title>Coral Web Panel</title>
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon.png"/>
+  <link rel="stylesheet" type="text/css" href="/static/css/coral.css">
+  <script type="text/javascript" src="/static/js/protobuf.min.js"></script>
+  <script type="text/javascript" src="/static/js/broadway/YUVCanvas.js"></script>
+  <script type="text/javascript" src="/static/js/broadway/Decoder.js"></script>
+  <script type="text/javascript" src="/static/js/broadway/Player.js"></script>
+  <!-- <script type="text/javascript" src="/static/js/ws_socket3.js"></script> -->
+  <script src="//code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" integrity="sha256-yr4fRk/GU1ehYJPAs8P4JlTgu0Hdsp4ZKrx8bDEDC3I=" crossorigin="anonymous"></script>
+ 
+  <script type="text/javascript" charset="utf-8">
+    $(document).ready(function() {
+      function createPlayer(width, height, streamControl) {
+  var player = new Player({
+    useWorker: true,
+    workerFile: "/static/js/broadway/Decoder.js",
+    reuseMemory: true,
+    webgl: "auto",
+    size: {
+      width: width,
+      height: height,
+    }
+  });
+
+  var frameCount = 0
+  player.onPictureDecoded = function(data) {
+    if (frameCount == 0) {
+      console.log("First frame decoded");
+    }
+    frameCount++;
+  };
+
+  var container = document.getElementById("container");
+
+  var cropDiv = document.createElement("div");
+  cropDiv.style.overflow = "hidden";
+  cropDiv.style.position = "absolute";
+  cropDiv.style.width = width + "px";
+  cropDiv.style.height = height + "px";
+  
+  cropDiv.appendChild(player.canvas);
+  container.appendChild(cropDiv);
+
+  var canvas = document.createElement("canvas");
+  canvas.id = "overlay"
+  canvas.style.position = "relative";
+  canvas.width = width;
+  canvas.height = height;
+  container.appendChild(canvas);
+
+  return player
+}
+
+window.onload = function() {
+  protobuf.load("/static/js/messages.proto", function(err, root) {
+    if (err)
+      throw err;
+
+    var ClientBound = root.lookupType("ClientBound");
+    var ServerBound = root.lookupType("ServerBound")
+
+    function streamControl(enabled) {
+        serverBound = ServerBound.create({streamControl: {enabled:enabled}});
+       
+        socket.send(ServerBound.encode(serverBound).finish());
+       
+  
+        
+    }
+
+    var player = null;
+
+
+        var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+        socket.on('connect', function() {
+            console.log("test")
+            socket.emit('my_event', "aaaaaa");
+        });
+        socket.on('my_response', function(event) {
+          function buf2hex(buffer) { // buffer is an ArrayBuffer
+        return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
+      }
+      
+      var x = event
+     
+      var y = x.slice(2);
+
+      //console.log(y.byteLength, "1")
+      if (y.byteLength > 100) {
+        var y = y.slice(2)
+        //  block of code to be executed if the condition is true
+      } 
+      //console.log(buf2hex(y))
+ 
+      
+      var clientBound = ClientBound.decode(new Uint8Array(y))
+      //console.log(clientBound, "CLIENT BOUN", clientBound.message)
+      switch (clientBound.message) {
+        case 'start':
+          console.log('Starting...')
+          start = clientBound.start;
+          if (player == null) {
+            console.log('Starting...')
+            player = createPlayer(start.width, start.height, streamControl);
+            console.log("Started: " + start.width + "x" + start.height);
+          }
+          break;
+        case 'video':
+          player.decode(clientBound.video.data);
+          console.log(clientBound.video.data)
+          break;
+        case 'overlay':
+          var canvas = document.getElementById("overlay");
+          var ctx = canvas.getContext("2d");
+          var img = new Image();
+          img.onload = function() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          }
+          img.src = "data:image/svg+xml;charset=utf-8," + clientBound.overlay.svg;
+          break;
+        case 'stop':
+          console.log("Stopped.");
+          break;
+      }
+        });
+      
+    });
+  };
+  });
+
+
+
+</script>
+ 
+</head>
+<body>
+
+ 
+
+  <div id="container"></div>
+   
+
+</body>
+</html>
