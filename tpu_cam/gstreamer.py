@@ -293,67 +293,15 @@ def quit():
 def run_pipeline(pipeline, layout, loop, render_overlay, display, handle_sigint=True, signals=None):
     # Create pipeline
     pipeline = describe(pipeline)
-    print(pipeline)
+   # print(pipeline, "ahh")
+    #pipeline = 'v4l2src device=/dev/video0 ! tee name=t t. ! queue max-size-buffers=1 leaky=downstream ! video/x-raw,format=YUY2,width=640,height=480,framerate=30/1 ! videoconvert ! x264enc speed-preset=ultrafast tune=zerolatency threads=4 key-int-max=5 bitrate=1000 aud=False ! video/x-h264,profile=baseline ! h264parse ! video/x-h264,stream-format=byte-stream,alignment=nal ! appsink name=CV emit-signals=True max-buffers=1 drop=False sync=False'
+    pipeline = "v4l2src device=/dev/video0 ! video/x-raw,format=YUY2,width=640,height=480,framerate=30/1 ! tee name=t t. ! queue max-size-buffers=1 leaky=downstream ! videoconvert ! x264enc speed-preset=ultrafast tune=zerolatency threads=4 key-int-max=5 bitrate=1000 aud=False ! video/x-h264,profile=baseline ! h264parse ! video/x-h264,stream-format=byte-stream,alignment=nal ! appsink name=h264sink emit-signals=True max-buffers=1 drop=False sync=False"
     pipeline = Gst.parse_launch(pipeline)
 
     # Set up a pipeline bus watch to catch errors.
     bus = pipeline.get_bus()
     bus.add_signal_watch()
     bus.connect('message', on_bus_message, pipeline, loop)
-
-    if display is not Display.NONE:
-        # Needed to commit the wayland sub-surface.
-        def on_gl_draw(sink, widget):
-            widget.queue_draw()
-
-        # Needed to account for window chrome etc.
-        def on_widget_configure(widget, event, glsink):
-            allocation = widget.get_allocation()
-            glsink.set_render_rectangle(allocation.x, allocation.y,
-                    allocation.width, allocation.height)
-            return False
-
-        window = Gtk.Window(Gtk.WindowType.TOPLEVEL)
-        window.set_title(WINDOW_TITLE)
-        window.set_default_size(layout.render_size.width, layout.render_size.height)
-        if display is Display.FULLSCREEN:
-            window.fullscreen()
-
-        drawing_area = Gtk.DrawingArea()
-        window.add(drawing_area)
-        drawing_area.realize()
-
-        glsink = pipeline.get_by_name('glsink')
-        glsink.connect('drawn', on_gl_draw, drawing_area)
-
-        # Wayland window handle.
-        wl_handle = glsink.get_wayland_window_handle(drawing_area)
-        glsink.set_window_handle(wl_handle)
-
-        # Wayland display context wrapped as a GStreamer context.
-        wl_display = glsink.get_default_wayland_display_context()
-        glsink.set_context(wl_display)
-
-        drawing_area.connect('configure-event', on_widget_configure, glsink)
-        window.connect('delete-event', Gtk.main_quit)
-        window.show_all()
-
-        # The appsink pipeline branch must use the same GL display as the screen
-        # rendering so they get the same GL context. This isn't automatically handled
-        # by GStreamer as we're the ones setting an external display handle.
-        def on_bus_message_sync(bus, message, glsink):
-            if message.type == Gst.MessageType.NEED_CONTEXT:
-                _, context_type = message.parse_context_type()
-                if context_type == GstGL.GL_DISPLAY_CONTEXT_TYPE:
-                    sinkelement = glsink.get_by_interface(GstVideo.VideoOverlay)
-                    gl_context = sinkelement.get_property('context')
-                    if gl_context:
-                        display_context = Gst.Context.new(GstGL.GL_DISPLAY_CONTEXT_TYPE, True)
-                        GstGL.context_set_gl_display(display_context, gl_context.get_display())
-                        message.src.set_context(display_context)
-            return Gst.BusSyncReply.PASS
-
-        bus.set_sync_handler(on_bus_message_sync, glsink)
 
     with Worker(save_frame) as images, Commands() as get_command:
         signals = {'appsink':

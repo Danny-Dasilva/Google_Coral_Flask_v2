@@ -30,7 +30,6 @@ class Camera:
 
     @property
     def resolution(self):
-        
         return self._layout.render_size
 
     def request_key_frame(self):
@@ -38,7 +37,7 @@ class Camera:
 
     def start_recording(self, obj, format, profile, inline_headers, bitrate, intra_period):
         def on_buffer(data, _):
-            print(len(data))
+
             obj.write(data)
 
         def render_overlay(tensor, layout, command):
@@ -47,8 +46,9 @@ class Camera:
         signals = {
           'h264sink': {'new-sample': gstreamer.new_sample_callback(on_buffer)},
         }
-        
+
         pipeline = self.make_pipeline(format, profile, inline_headers, bitrate, intra_period)
+        #print(pipeline)
 
         self._thread = threading.Thread(target=gstreamer.run_pipeline,
                                         args=(pipeline, self._layout, self._loop,

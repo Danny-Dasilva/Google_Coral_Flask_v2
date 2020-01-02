@@ -27,7 +27,7 @@ ALLOWED_NALS = {NAL.CODED_SLICE_NON_IDR,
                 NAL.SEI}
 
 def StartMessage(resolution):
-    print(resolution)
+    
     width, height = resolution
     return pb2.ClientBound(timestamp_us=int(time.monotonic() * 1000000),
                            start=pb2.Start(width=width, height=height))
@@ -109,7 +109,6 @@ class StreamingServer:
         self.close()
 
     def __init__(self, camera, q, bitrate=1000000,):
-        
         self._bitrate = bitrate
         self._camera = camera
         self.q = q
@@ -117,14 +116,13 @@ class StreamingServer:
         self._enabled_clients = AtomicSet()
         self._done = threading.Event()
         self._commands = queue.Queue()
-        self.client = Clientt(self._commands, self._camera.resolution, self.q)
-
-        #self._thread = threading.Thread(target=self._run)
-        #self._thread.start()
+        self._thread = threading.Thread(target=self._run)
+        self._thread.start()
         self._start_recording()
-        
-        self.client.start()
-        
+        client = Clientt(self._commands, self._camera.resolution, self.q)
+
+        client.start()
+
     def close(self):
         self._done.set()
         self._thread.join()
@@ -173,13 +171,12 @@ class StreamingServer:
             Logger.info('Done')
 
     def write(self, data):
-        
         """Called by camera thread for each compressed frame."""
         assert data[0:4] == b'\x00\x00\x00\x01'
         frame_type = data[4] & 0b00011111
         if frame_type in ALLOWED_NALS:
-            client = self.client.send_video(frame_type, data)
-            #states = {client.send_video(frame_type, data) for client in self._enabled_clients}
+
+            states = {client.send_video(frame_type, data) for client in self._enabled_clients}
 
 class ClientLogger(logging.LoggerAdapter):
     def process(self, msg, kwargs):
@@ -197,18 +194,16 @@ class ClientCommand(Enum):
 
 class Clientt:
     def __init__(self, command_queue, resolution, q):
-        print("init")
         self._lock = threading.Lock()  # Protects _state.
-        self._state = ClientState.ENABLED
+        self._state = ClientState.DISABLED
         self._Logger = ClientLogger(Logger, {'name': "Orange_logger"})
         self._commands = command_queue
         self._tx_q = DroppingQueue(15)
         self.q = q
         self._rx_thread = threading.Thread(target=self._rx_run, args=(False,))
         self._tx_thread = threading.Thread(target=self._tx_run)
-        self.start()
+        self._queue_message(StartMessage(resolution))
         self._resolution = resolution
-        print(self._resolution, "existing res")
     class WsPacket:
         def __init__(self):
             self.fin = True
@@ -267,15 +262,12 @@ class Clientt:
     
 
     def send_video(self, frame_type, data):
-        
         """Only called by camera thread."""
         with self._lock:
             if self._state == ClientState.DISABLED:
-                print("disabled")
                 pass
             elif self._state == ClientState.ENABLED_NEEDS_SPS:
                 if frame_type == NAL.SPS:
-                    
                     dropped = self._queue_video(data)
                     if not dropped:
                         self._state = ClientState.ENABLED
@@ -325,11 +317,12 @@ class Clientt:
                 packet.append(message.SerializeToString())
                 
             buf = packet.serialize()
+            
             self.q.put(buf)
             
 
     def _rx_run(self, done):
-        print("called rx run")
+        
         if done == False:
             done = True
             self._handle_stream_control()
@@ -342,8 +335,6 @@ class Clientt:
             
          
             self._Logger.info('Enabling client')
-            
-            print(self._resolution, "existing res in ")
             self._state = ClientState.ENABLED_NEEDS_SPS
             self._queue_message(StartMessage(self._resolution))
             self._send_command(ClientCommand.ENABLE)

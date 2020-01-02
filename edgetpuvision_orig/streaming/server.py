@@ -346,6 +346,7 @@ class StreamingServer:
         """Called by camera thread for each compressed frame."""
         assert data[0:4] == b'\x00\x00\x00\x01'
         frame_type = data[4] & 0b00011111
+        print(len(data))
         if frame_type in ALLOWED_NALS:
             states = {client.send_video(frame_type, data) for client in self._enabled_clients}
             if ClientState.ENABLED_NEEDS_SPS in states:

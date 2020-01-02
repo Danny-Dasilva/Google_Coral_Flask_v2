@@ -48,6 +48,7 @@ class Camera:
         }
 
         pipeline = self.make_pipeline(format, profile, inline_headers, bitrate, intra_period)
+        #print(pipeline)
 
         self._thread = threading.Thread(target=gstreamer.run_pipeline,
                                         args=(pipeline, self._layout, self._loop,
