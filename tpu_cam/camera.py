@@ -44,14 +44,14 @@ class Camera:
 
             obj.write(data)
 
-        def render_overlay(tensor, layout, command):
+        def render_overlay(tensor, layout):
             if self.render_overlay:
-                self.render_overlay(tensor, layout, command)
+                self.render_overlay(tensor, layout)
             return None
 
-        def stupid_overlay(tensor, layout, command):
+        def stupid_overlay(tensor, layout):
             if self.stupid_overlay:
-                self.stupid_overlay(tensor, layout, command)
+                self.stupid_overlay(tensor, layout)
             # image = tensor.reshape(480, 640, 3)
             # im = Image.fromarray(image)
             # im.save("test.jpeg")

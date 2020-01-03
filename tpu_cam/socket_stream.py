@@ -86,8 +86,9 @@ def run_server(q):
      
     
 
-    def render_overlay(tensor, layout, command):
-        pass
+    def render_overlay(tensor, layout):
+        print(tensor.shape)
+     
         
         # test = tensor.reshape(224, 224, 3)
         
@@ -97,9 +98,8 @@ def run_server(q):
         #print(tensor.shape)
         #self.overlay = self.gen.send((tensor, layout, command))
         
-    def stupid_overlay(tensor, layout, command):
-        pass
-        #print(tensor.shape)
+    def stupid_overlay(tensor, layout):
+        print(tensor.shape)
         # test = tensor.reshape(480, 640, 3)
         # im = PIL.Image.fromarray(test)
 
