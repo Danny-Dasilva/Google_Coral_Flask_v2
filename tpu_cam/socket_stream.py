@@ -72,14 +72,40 @@ def run_server(q):
                         default='/dev/video0:YUY2:640x480:30/1')
     parser.add_argument('--bitrate', type=int, default=1000000,
                         help='Video streaming bitrate (bit/s)')
+    parser.add_argument('--loop', default=False, action='store_true',
+                            help='Loop input video file')
    
 
     
     args = parser.parse_args()
 
   
-    camera = make_camera(args.source)
-  
+    camera = make_camera(args.source, [300,300], args.loop)
+
+    
+     
+    
+
+    def render_overlay(tensor, layout, command):
+        pass
+        
+        # test = tensor.reshape(224, 224, 3)
+        
+        # im = PIL.Image.fromarray(numpy.uint8(test))
+        # self.img = im
+
+        #print(tensor.shape)
+        #self.overlay = self.gen.send((tensor, layout, command))
+        
+    def stupid_overlay(tensor, layout, command):
+        pass
+        #print(tensor.shape)
+        # test = tensor.reshape(480, 640, 3)
+        # im = PIL.Image.fromarray(test)
+
+    camera.stupid_overlay = stupid_overlay
+    camera.render_overlay = render_overlay
+        
 
     with StreamingServer(camera, q, args.bitrate) as server:
         

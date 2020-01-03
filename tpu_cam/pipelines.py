@@ -33,13 +33,22 @@ def display_sink():
 def h264_sink():
     return Sink('app', name='h264sink', emit_signals=True, max_buffers=1, drop=False, sync=False)
 
-# def inference_pipeline(layout, stillimage=False):
-#     #size = max_inner_size(layout.render_size, layout.inference_size)
-#     return [
-#         Filter('glfilterbin', filter='glbox'),
-#         Caps('video/x-raw', format='RGB', width=layout.inference_size.width, height=layout.inference_size.height),
-#         Sink('app', name='appsink', emit_signals=True, max_buffers=1, drop=True, sync=False),
-#     ]
+def inference_pipeline(layout, stillimage=False):
+    size = max_inner_size(layout.render_size, layout.inference_size)
+    return [
+        Filter('glfilterbin', filter='glbox'),
+        Caps('video/x-raw', format='RGB', width=layout.inference_size.width, height=layout.inference_size.height),
+        Sink('app', name='appsink', emit_signals=True, max_buffers=1, drop=True, sync=False),
+    ]
+
+def stupid_pipeline(layout, stillimage=False):
+    size = max_inner_size(layout.render_size, layout.inference_size)
+    return [
+        Filter('glfilterbin', filter='glbox'),
+        Caps('video/x-raw', format='RGB'),
+        #Caps('video/x-raw', type='video'),
+        Sink('app', name='stupidsink', emit_signals=True, max_buffers=1, drop=True, sync=False),
+    ]
 
 # Display
 def image_display_pipeline(filename, layout):
@@ -141,4 +150,22 @@ def camera_streaming_pipeline(fmt, profile, bitrate, layout):
           Filter('h264parse'),
           Caps('video/x-h264', stream_format='byte-stream', alignment='nal'),
           h264_sink()],
+        [Pad('t'),
+         Queue(),
+         inference_pipeline(layout)],
+         [Pad('t'),
+         Queue(),
+         stupid_pipeline(layout)],
+    )
+def new_camera_streaming_pipeline(fmt, layout):
+    return (
+        [v4l2_src(fmt), Tee(name='t')],
+
+        [Filter('glfilterbin', filter='glbox'),
+        Caps('video/x-raw', format='RGB'),
+        Sink('app', name='rgbsink', emit_signals=True, max_buffers=1, drop=True, sync=False)],
+
+        [Pad('t'),
+         Queue(),
+         inference_pipeline(layout)],
     )

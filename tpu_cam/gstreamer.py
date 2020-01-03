@@ -25,6 +25,17 @@ import sys
 import termios
 import threading
 import time
+from Return import CameraManager, GStreamerPipelines
+
+
+
+camMan = CameraManager() #Creates new camera manager object
+streamStarted = False
+cameras = {"USB":1,"CSI":0}
+
+streamingCamera = "CSI"
+
+
 
 import numpy as np
 
@@ -136,12 +147,19 @@ def save_frame(rgb, size, overlay=None, ext='png'):
             f.write(overlay)
         print('Overlay saved as "%s"' % name)
 
-Layout = collections.namedtuple('Layout', ('render_size'))
+Layout = collections.namedtuple('Layout', ('size', 'window', 'inference_size', 'render_size'))
 
-def make_layout(render_size):
-    
+
+def make_layout(inference_size, render_size):
+    inference_size = Size(*inference_size)
     render_size = Size(*render_size)
-    return Layout(render_size=render_size)
+    size = min_outer_size(inference_size, render_size)
+    window = center_inside(render_size, size)
+    
+    return Layout(size=size, window=window,
+                  inference_size=inference_size, render_size=render_size)
+
+
 
 def caps_size(caps):
     structure = caps.get_structure(0)
@@ -206,25 +224,25 @@ def on_sink_eos(sink, pipeline):
     if overlay:
         overlay.set_eos()
 
-def on_new_sample(sink, pipeline, render_overlay, layout, images, get_command):
+def on_new_sample(sink, pipeline, render_overlay, layout, images):
     with pull_sample(sink) as (sample, data):
         custom_command = None
         save_frame = False
 
-        command = get_command()
-        if command == COMMAND_SAVE_FRAME:
-            save_frame = True
-        elif command == COMMAND_PRINT_INFO:
-            print('Timestamp: %.2f' % time.monotonic())
-            print('Render size: %d x %d' % layout.render_size)
-            print('Inference size: %d x %d' % layout.inference_size)
-        elif  command == COMMAND_QUIT:
-            Gtk.main_quit()
-        else:
-            custom_command = command
+        # command = get_command()
+        # if command == COMMAND_SAVE_FRAME:
+        #     save_frame = True
+        # elif command == COMMAND_PRINT_INFO:
+        #     print('Timestamp: %.2f' % time.monotonic())
+        #     print('Render size: %d x %d' % layout.render_size)
+        #     print('Inference size: %d x %d' % layout.inference_size)
+        # elif  command == COMMAND_QUIT:
+        #     Gtk.main_quit()
+        # else:
+        #     custom_command = command
 
-        svg = render_overlay(np.frombuffer(data, dtype=np.uint8),
-                             command=custom_command)
+        # svg = render_overlay(np.frombuffer(data, dtype=np.uint8),
+        #                      command=custom_command)
         glsink = pipeline.get_by_name('glsink')
         if glsink:
             glsink.set_property('svg', svg)
@@ -290,12 +308,19 @@ def file_pipline(is_image, filename, layout, display):
 def quit():
     Gtk.main_quit()
 
-def run_pipeline(pipeline, layout, loop, render_overlay, display, handle_sigint=True, signals=None):
+
+
+def run_pipeline(pipeline, layout, loop, render_overlay, stupid_overlay, display, handle_sigint=True, signals=None):
     # Create pipeline
-    pipeline = describe(pipeline)
-   # print(pipeline, "ahh")
-    #pipeline = 'v4l2src device=/dev/video0 ! tee name=t t. ! queue max-size-buffers=1 leaky=downstream ! video/x-raw,format=YUY2,width=640,height=480,framerate=30/1 ! videoconvert ! x264enc speed-preset=ultrafast tune=zerolatency threads=4 key-int-max=5 bitrate=1000 aud=False ! video/x-h264,profile=baseline ! h264parse ! video/x-h264,stream-format=byte-stream,alignment=nal ! appsink name=CV emit-signals=True max-buffers=1 drop=False sync=False'
-    pipeline = "v4l2src device=/dev/video0 ! video/x-raw,format=YUY2,width=640,height=480,framerate=30/1 ! tee name=t t. ! queue max-size-buffers=1 leaky=downstream ! videoconvert ! x264enc speed-preset=ultrafast tune=zerolatency threads=4 key-int-max=5 bitrate=1000 aud=False ! video/x-h264,profile=baseline ! h264parse ! video/x-h264,stream-format=byte-stream,alignment=nal ! appsink name=h264sink emit-signals=True max-buffers=1 drop=False sync=False"
+    
+    
+    if os.path.exists('/dev/video{0}'.format(cameras[streamingCamera])):
+        USBCam = camMan.newCam(cameras[streamingCamera]) #Creates new USB-camera
+        CV = USBCam.addPipeline(GStreamerPipelines.H264,(640,480),30,"h264sink")
+        T = USBCam.addPipeline(GStreamerPipelines.RGB,(300,300),30,"appsink")
+        pipeline = USBCam.addPipeline(GStreamerPipelines.RGB2,(640,480),30,"stupidsink")
+
+
     pipeline = Gst.parse_launch(pipeline)
 
     # Set up a pipeline bus watch to catch errors.
@@ -303,19 +328,28 @@ def run_pipeline(pipeline, layout, loop, render_overlay, display, handle_sigint=
     bus.add_signal_watch()
     bus.connect('message', on_bus_message, pipeline, loop)
 
+    # removing commands
     with Worker(save_frame) as images, Commands() as get_command:
         signals = {'appsink':
-            {'new-sample': functools.partial(on_new_sample,
+            {'new-sample': functools.partial(on_new_sample, 
                 render_overlay=functools.partial(render_overlay, layout=layout),
                 layout=layout,
-                images=images,
-                get_command=get_command),
+                images=images),
+             'eos' : on_sink_eos}, 
+             'stupidsink':
+            {'new-sample': functools.partial(on_new_sample, 
+                render_overlay=functools.partial(stupid_overlay, layout=layout),
+                layout=layout,
+                images=images,),
              'eos' : on_sink_eos},
             **(signals or {})
         }
+        
 
         for name, signals in signals.items():
+            print(name, "ahhhhhh")
             component = pipeline.get_by_name(name)
+            
             if component:
                 for signal_name, signal_handler in signals.items():
                     component.connect(signal_name, signal_handler, pipeline)

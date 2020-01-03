@@ -91,6 +91,7 @@ class DeviceCamera(Camera):
 
 def make_camera(source, inference_size, loop):
     fmt = parse_format(source)
+    
     if fmt:
         return DeviceCamera(fmt, inference_size)
 
