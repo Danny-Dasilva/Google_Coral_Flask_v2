@@ -17,8 +17,17 @@ import threading
 
 import gstreamer
 import pipelines
+from Return import CameraManager, GStreamerPipelines
 
 from gst import *
+
+
+
+camMan = CameraManager() #Creates new camera manager object
+streamStarted = False
+cameras = {"USB":1,"CSI":0}
+
+streamingCamera = "CSI"
 
 
 
@@ -60,17 +69,21 @@ class Camera:
             return None
 
 
-        signals = {
-          'h264sink': {'new-sample': gstreamer.new_sample_callback(on_buffer)},
-        }
+        # signals = {
+        #   'h264sink': {'new-sample': gstreamer.new_sample_callback(on_buffer)},
+        # }
 
-        pipeline = self.make_pipeline(format, profile, inline_headers, bitrate, intra_period)
-        
+       # pipeline = self.make_pipeline(format, profile, inline_headers, bitrate, intra_period)
+        if os.path.exists('/dev/video{0}'.format(cameras[streamingCamera])):
+            USBCam = camMan.newCam(cameras[streamingCamera]) #Creates new USB-camera
+            CV = USBCam.addPipeline(GStreamerPipelines.H264,(640,480),30,"h264sink")
+            T = USBCam.addPipeline(GStreamerPipelines.RGB,(300,300),30,"appsink")
+            pipeline = USBCam.addPipeline(GStreamerPipelines.RGB2,(640,480),30,"stupidsink")
 
         self._thread = threading.Thread(target=gstreamer.run_pipeline,
                                         args=(pipeline, self._layout, self._loop,
-                                              render_overlay, stupid_overlay, gstreamer.Display.NONE,
-                                              False, signals))
+                                              render_overlay, stupid_overlay, on_buffer,
+                                              False))
         self._thread.start()
 
     def le(self):
@@ -95,8 +108,8 @@ class DeviceCamera(Camera):
         super().__init__(fmt.size, inference_size, loop=False)
         self._fmt = fmt
 
-    def make_pipeline(self, fmt, profile, inline_headers, bitrate, intra_period):
-        return pipelines.camera_streaming_pipeline(self._fmt, profile, bitrate, self._layout)
+    # def make_pipeline(self, fmt, profile, inline_headers, bitrate, intra_period):
+    #     return pipelines.camera_streaming_pipeline(self._fmt, profile, bitrate, self._layout)
 
 def make_camera(source, inference_size, loop):
     fmt = parse_format(source)

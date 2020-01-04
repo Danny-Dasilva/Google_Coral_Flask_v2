@@ -25,15 +25,11 @@ import sys
 import termios
 import threading
 import time
-from Return import CameraManager, GStreamerPipelines
 
 
 
-camMan = CameraManager() #Creates new camera manager object
-streamStarted = False
-cameras = {"USB":1,"CSI":0}
 
-streamingCamera = "CSI"
+
 
 
 
@@ -58,7 +54,7 @@ from gi.repository import GstPbutils  # Must be called after Gst.init().
 
 from PIL import Image
 
-from pipelines import *
+from gst import *
 
 COMMAND_SAVE_FRAME = ' '
 COMMAND_PRINT_INFO = 'p'
@@ -288,60 +284,55 @@ def quit():
 
 
 
-def run_pipeline(pipeline, layout, loop, render_overlay, stupid_overlay, display, handle_sigint=True, signals=None):
+def run_pipeline(pipeline, layout, loop, render_overlay, stupid_overlay, on_buffer, handle_sigint=True, signals=None):
     # Create pipeline
     
+    signals = {}
     
-    if os.path.exists('/dev/video{0}'.format(cameras[streamingCamera])):
-        USBCam = camMan.newCam(cameras[streamingCamera]) #Creates new USB-camera
-        CV = USBCam.addPipeline(GStreamerPipelines.H264,(640,480),30,"h264sink")
-        T = USBCam.addPipeline(GStreamerPipelines.RGB,(300,300),30,"appsink")
-        pipeline = USBCam.addPipeline(GStreamerPipelines.RGB2,(640,480),30,"stupidsink")
-
-
+    for line in pipeline.splitlines():
+        before = line.partition('appsink name=')[2]
+        word = before.partition(" ")[0]
+        if word:
+            if word == "h264sink":
+                print("checker\n")
+                testdic.update({word: {'new-sample': new_sample_callback(on_buffer)}})
+            else:
+                testdic.update( {word:
+                {'new-sample': functools.partial(on_new_sample, 
+                    render_overlay=functools.partial(render_overlay, layout=layout)),
+                    'eos' : on_sink_eos},} )
+    print(signals, "ahhhhhhhhhhhh\n")
+        
+        
+    
     pipeline = Gst.parse_launch(pipeline)
 
     # Set up a pipeline bus watch to catch errors.
     bus = pipeline.get_bus()
     bus.add_signal_watch()
     bus.connect('message', on_bus_message, pipeline, loop)
-
-    # removing commands
-    with Worker(save_frame) as images, Commands() as get_command:
-        signals = {'appsink':
-            {'new-sample': functools.partial(on_new_sample, 
-                render_overlay=functools.partial(render_overlay, layout=layout)),
-             'eos' : on_sink_eos}, 
-             'stupidsink':
-            {'new-sample': functools.partial(on_new_sample, 
-                render_overlay=functools.partial(stupid_overlay, layout=layout)),
-             'eos' : on_sink_eos},
-            **(signals or {})
-        }
+    
 
 
-        for name, signals in signals.items():
-            print(name, "ahhhhhh")
-            component = pipeline.get_by_name(name)
-            
-            if component:
-                for signal_name, signal_handler in signals.items():
-                    print(signal_name, signal_handler, pipeline, "commpontent connect")
-                    component.connect(signal_name, signal_handler, pipeline)
+    for name, signals in signals.items():
+       
+        component = pipeline.get_by_name(name)
+        
+        if component:
+            for signal_name, signal_handler in signals.items():
+              #  print(signal_name, signal_handler, pipeline, "commpontent connect")
+                component.connect(signal_name, signal_handler, pipeline)
 
-        # Handle signals.
-        if handle_sigint:
-            GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, Gtk.main_quit)
 
-        # Run pipeline.
-        pipeline.set_state(Gst.State.PLAYING)
-        try:
-            Gtk.main()
-        except KeyboardInterrupt:
-            pass
-        finally:
-            pipeline.set_state(Gst.State.NULL)
+    # Run pipeline.
+    pipeline.set_state(Gst.State.PLAYING)
+    try:
+        Gtk.main()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        pipeline.set_state(Gst.State.NULL)
 
-        # Process all pending MainContext operations.
-        while GLib.MainContext.default().iteration(False):
-            pass
+    # Process all pending MainContext operations.
+    while GLib.MainContext.default().iteration(False):
+        pass
