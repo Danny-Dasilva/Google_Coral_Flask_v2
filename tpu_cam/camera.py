@@ -16,7 +16,7 @@ import os
 import threading
 
 import gstreamer
-import pipelines
+#import pipelines
 from Return import CameraManager, GStreamerPipelines
 
 from gst import *
@@ -76,10 +76,9 @@ class Camera:
        # pipeline = self.make_pipeline(format, profile, inline_headers, bitrate, intra_period)
         if os.path.exists('/dev/video{0}'.format(cameras[streamingCamera])):
             USBCam = camMan.newCam(cameras[streamingCamera]) #Creates new USB-camera
-            CV = USBCam.addPipeline(GStreamerPipelines.H264,(640,480),30,"h264sink")
-            T = USBCam.addPipeline(GStreamerPipelines.RGB,(300,300),30,"appsink")
-            pipeline = USBCam.addPipeline(GStreamerPipelines.RGB2,(640,480),30,"stupidsink")
-
+            pipeline = USBCam.addPipeline(GStreamerPipelines.H264,(640,480),30,"h264sink")
+            
+        print(pipeline)
         self._thread = threading.Thread(target=gstreamer.run_pipeline,
                                         args=(pipeline, self._layout, self._loop,
                                               render_overlay, stupid_overlay, on_buffer,

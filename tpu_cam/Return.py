@@ -95,7 +95,10 @@ class StreamValue():
     def addListener(self,obj):
        self.listeners.append(obj)
 class GStreamerPipelines(enum.Enum):
-    SRC = "v4l2src device=/dev/video0 ! video/x-raw,format=YUY2,width=640,height=480,framerate=30/1 ! tee name=t"
+  #  SRC = "v4l2src device=/dev/video0 ! video/x-raw,format=YUY2,width=640,height=480,framerate=30/1 ! tee name=t"
+  #v4l2src device="/dev/video0" ! video/x-raw,width=640,height=480,framerate=30/1 ! videoconvert ! video/x-raw,format=I420 ! autovideosink
+
+    SRC = 'v4l2src device="/dev/video0" ! video/x-raw,width=640,height=480,framerate=30/1 ! videoconvert ! video/x-raw,format=I420 ! tee name=t'
     H264 = "t. ! queue max-size-buffers=1 leaky=downstream ! videoconvert ! x264enc speed-preset=ultrafast tune=zerolatency threads=4 key-int-max=5 bitrate=1000 aud=False ! video/x-h264,profile=baseline ! h264parse ! video/x-h264,stream-format=byte-stream,alignment=nal ! appsink name=h264sink emit-signals=True max-buffers=1 drop=False sync=False"
     RGB = "t. ! queue ! glfilterbin filter=glbox ! video/x-raw,format=RGB,width=300,height=300 ! appsink name=appsink emit-signals=True max-buffers=1 drop=True sync=False"
     RGB2 = "t. ! queue ! glfilterbin filter=glbox ! video/x-raw,format=RGB ! appsink name=stupidsink emit-signals=True max-buffers=1 drop=True sync=False"

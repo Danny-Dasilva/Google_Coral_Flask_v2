@@ -295,13 +295,13 @@ def run_pipeline(pipeline, layout, loop, render_overlay, stupid_overlay, on_buff
         if word:
             if word == "h264sink":
                 print("checker\n")
-                testdic.update({word: {'new-sample': new_sample_callback(on_buffer)}})
+                signals.update({word: {'new-sample': new_sample_callback(on_buffer)}})
             else:
-                testdic.update( {word:
+                signals.update( {word:
                 {'new-sample': functools.partial(on_new_sample, 
                     render_overlay=functools.partial(render_overlay, layout=layout)),
                     'eos' : on_sink_eos},} )
-    print(signals, "ahhhhhhhhhhhh\n")
+  
         
         
     
